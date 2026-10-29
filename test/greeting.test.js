@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getGreeting, formatVersion } from '../src/greeting.js';
+import { getGreeting, formatVersion, formatDate } from '../src/greeting.js';
 
 test('getGreeting liefert die Begrüßung passend zur Tageszeit', () => {
   assert.equal(getGreeting(3), 'Gute Nacht');
@@ -28,4 +28,13 @@ test('formatVersion zeigt Version, Umgebung und kurzen Commit', () => {
 test('formatVersion kommt mit fehlenden Angaben zurecht', () => {
   assert.equal(formatVersion({}), 'Version unbekannt');
   assert.equal(formatVersion(undefined), 'Version unbekannt');
+});
+
+test('formatDate gibt das Datum ausgeschrieben auf Deutsch aus', () => {
+  assert.equal(formatDate(new Date(2026, 9, 29)), 'Donnerstag, 29. Oktober 2026');
+});
+
+test('formatDate lehnt ungültige Werte ab', () => {
+  assert.throws(() => formatDate(new Date('kein Datum')), TypeError);
+  assert.throws(() => formatDate('2026-10-29'), TypeError);
 });
