@@ -24,3 +24,17 @@ export function formatVersion(info) {
   const commit = info?.commit ? ` · ${info.commit.slice(0, 7)}` : '';
   return `Version ${version}${env}${commit}`;
 }
+
+/**
+ * Formatiert ein Datum für die Anzeige, z. B. "Donnerstag, 29. Oktober 2026".
+ * @param {Date} date
+ * @returns {string}
+ */
+export function formatDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw new TypeError('Ungültiges Datum');
+  }
+  return date.toLocaleDateString('de-DE', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+}
