@@ -38,3 +38,17 @@ export function formatDate(date) {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 }
+
+/**
+ * Formatiert eine Uhrzeit als "HH:MM:SS".
+ * @param {Date} date
+ * @returns {string}
+ */
+export function formatTime(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw new TypeError('Ungültiges Datum');
+  }
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((n) => String(n).padStart(2, '0'))
+    .join(':');
+}
