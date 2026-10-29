@@ -30,6 +30,13 @@ test('formatVersion kommt mit fehlenden Angaben zurecht', () => {
   assert.equal(formatVersion(undefined), 'Version unbekannt');
 });
 
+test('formatVersion blendet einen unbekannten Commit aus', () => {
+  assert.equal(
+    formatVersion({ version: 'dev', environment: 'local', commit: 'unknown' }),
+    'Version dev (local)',
+  );
+});
+
 test('formatDate gibt das Datum ausgeschrieben auf Deutsch aus', () => {
   assert.equal(formatDate(new Date(2026, 9, 29)), 'Donnerstag, 29. Oktober 2026');
 });

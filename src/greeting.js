@@ -21,7 +21,8 @@ export function getGreeting(hour) {
 export function formatVersion(info) {
   const version = info?.version || 'unbekannt';
   const env = info?.environment ? ` (${info.environment})` : '';
-  const commit = info?.commit ? ` · ${info.commit.slice(0, 7)}` : '';
+  const hasCommit = info?.commit && info.commit !== 'unknown';
+  const commit = hasCommit ? ` · ${info.commit.slice(0, 7)}` : '';
   return `Version ${version}${env}${commit}`;
 }
 
