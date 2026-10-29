@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getGreeting, formatVersion, formatDate } from '../src/greeting.js';
+import { getGreeting, formatVersion, formatDate, formatTime } from '../src/greeting.js';
 
 test('getGreeting liefert die Begrüßung passend zur Tageszeit', () => {
   assert.equal(getGreeting(3), 'Gute Nacht');
@@ -30,6 +30,13 @@ test('formatVersion kommt mit fehlenden Angaben zurecht', () => {
   assert.equal(formatVersion(undefined), 'Version unbekannt');
 });
 
+test('formatVersion blendet einen unbekannten Commit aus', () => {
+  assert.equal(
+    formatVersion({ version: 'dev', environment: 'local', commit: 'unknown' }),
+    'Version dev (local)',
+  );
+});
+
 test('formatDate gibt das Datum ausgeschrieben auf Deutsch aus', () => {
   assert.equal(formatDate(new Date(2026, 9, 29)), 'Donnerstag, 29. Oktober 2026');
 });
@@ -37,4 +44,13 @@ test('formatDate gibt das Datum ausgeschrieben auf Deutsch aus', () => {
 test('formatDate lehnt ungültige Werte ab', () => {
   assert.throws(() => formatDate(new Date('kein Datum')), TypeError);
   assert.throws(() => formatDate('2026-10-29'), TypeError);
+});
+
+test('formatTime gibt die Uhrzeit zweistellig aus', () => {
+  assert.equal(formatTime(new Date(2026, 9, 29, 9, 5, 7)), '09:05:07');
+  assert.equal(formatTime(new Date(2026, 9, 29, 21, 30, 0)), '21:30:00');
+});
+
+test('formatTime lehnt ungültige Werte ab', () => {
+  assert.throws(() => formatTime(new Date('x')), TypeError);
 });

@@ -21,7 +21,8 @@ export function getGreeting(hour) {
 export function formatVersion(info) {
   const version = info?.version || 'unbekannt';
   const env = info?.environment ? ` (${info.environment})` : '';
-  const commit = info?.commit ? ` · ${info.commit.slice(0, 7)}` : '';
+  const hasCommit = info?.commit && info.commit !== 'unknown';
+  const commit = hasCommit ? ` · ${info.commit.slice(0, 7)}` : '';
   return `Version ${version}${env}${commit}`;
 }
 
@@ -37,4 +38,18 @@ export function formatDate(date) {
   return date.toLocaleDateString('de-DE', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
+}
+
+/**
+ * Formatiert eine Uhrzeit als "HH:MM:SS".
+ * @param {Date} date
+ * @returns {string}
+ */
+export function formatTime(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw new TypeError('Ungültiges Datum');
+  }
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((n) => String(n).padStart(2, '0'))
+    .join(':');
 }
