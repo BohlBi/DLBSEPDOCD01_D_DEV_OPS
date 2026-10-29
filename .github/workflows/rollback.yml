@@ -28,7 +28,7 @@ jobs:
       APP_VERSION: ${{ inputs.version }}
       PORT: "8080"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Image-Referenz prüfen
         run: |
