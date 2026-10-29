@@ -20,7 +20,7 @@
       "@semantic-release/exec",
       {
         "verifyReleaseCmd": "echo \"next=${nextRelease.version}\" >> \"$GITHUB_OUTPUT\"",
-        "prepareCmd": "docker buildx imagetools create --tag \"$IMAGE_REPO:${nextRelease.version}\" --tag \"$IMAGE_REPO:latest\" \"$SOURCE_IMAGE\"",
+        "prepareCmd": "docker buildx imagetools create --prefer-index=false --tag \"$IMAGE_REPO:${nextRelease.version}\" --tag \"$IMAGE_REPO:latest\" \"$SOURCE_IMAGE\"",
         "successCmd": "echo \"version=${nextRelease.version}\" >> \"$GITHUB_OUTPUT\""
       }
     ],
