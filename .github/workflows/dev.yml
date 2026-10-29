@@ -1,0 +1,59 @@
+# Nach jedem Merge in dev: Image bauen, als sha-<commit> in GHCR ablegen
+# und automatisch in die Staging-Umgebung ausrollen.
+name: dev
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      push: true
+
+  deploy-staging:
+    needs: build
+    runs-on: [self-hosted, linux]
+    environment:
+      name: staging
+      url: http://localhost:8081
+    env:
+      IMAGE: ${{ needs.build.outputs.image }}
+      APP_ENV: staging
+      PORT: "8081"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Historie + Tags für die Versionsberechnung
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Vorab-Version berechnen (z. B. 1.5.0-rc.a1b2c3d)
+        id: version
+        run: node scripts/next-version.mjs --pre "rc.${GITHUB_SHA::7}"
+
+      - name: Bei GHCR anmelden
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Mit Docker Compose ausrollen
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version || format('dev-{0}', github.sha) }}
+        run: |
+          docker compose -p hello-staging -f deploy/docker-compose.yml pull
+          docker compose -p hello-staging -f deploy/docker-compose.yml up -d --remove-orphans
+
+      - name: Smoke-Test Staging
+        run: |
+          for i in $(seq 1 15); do curl -fsS "http://localhost:${PORT}/health" && break; sleep 1; done
+          curl -fsS "http://localhost:${PORT}/version.json"

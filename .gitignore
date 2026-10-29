@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Release Notes aus der Pipeline
+CHANGELOG.release.md

@@ -1,0 +1,48 @@
+# Quality Gate für Pull Requests nach dev und main.
+# Erst wenn alle Jobs grün sind, erlaubt die Branch Protection den Merge.
+name: ci
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  commit-message:
+    # Feature-PRs werden per Squash gemergt: der PR-Titel wird zur Commit-Nachricht
+    # und muss deshalb Conventional Commits entsprechen.
+    if: github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: PR-Titel prüfen
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | npx commitlint
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Statische Analyse (ESLint, HTMLHint)
+        run: npm run lint
+      - name: Unit-Tests
+        run: npm test
+
+  build:
+    needs: quality
+    uses: ./.github/workflows/_build.yml
+    with:
+      push: false

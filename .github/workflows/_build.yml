@@ -1,0 +1,61 @@
+# Wiederverwendbarer Build: Image bauen (inkl. Lint + Unit-Tests im Dockerfile),
+# Container starten, Smoke-Test, optional in die Registry pushen.
+# Aufgerufen von ci.yml (ohne Push) und dev.yml (mit Push).
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      push:
+        description: Image nach dem Smoke-Test in die Registry pushen
+        type: boolean
+        default: false
+    outputs:
+      image:
+        description: Unveränderliche Image-Referenz (Tag sha-<commit>)
+        value: ${{ jobs.build.outputs.image }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image-Namen bestimmen
+        id: meta
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"   # Registry verlangt Kleinbuchstaben
+          echo "image=ghcr.io/${repo}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Image bauen (Lint + Unit-Tests laufen in Stufe 1)
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            --tag "${{ steps.meta.outputs.image }}" .
+
+      - name: Smoke-Test des Containers
+        run: |
+          docker run -d --name smoke -p 8088:80 -e APP_VERSION=ci -e APP_ENV=ci \
+            "${{ steps.meta.outputs.image }}"
+          for i in $(seq 1 15); do
+            curl -fsS http://localhost:8088/health && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8088/health
+          curl -fsS http://localhost:8088/ | grep -q "<title>Hello DevOps</title>"
+          curl -fsS http://localhost:8088/version.json | grep -q '"environment":"ci"'
+          echo "Smoke-Test erfolgreich"
+
+      - name: Container-Logs bei Fehler
+        if: failure()
+        run: docker logs smoke || true
+
+      - name: Bei GHCR anmelden
+        if: inputs.push
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Image pushen
+        if: inputs.push
+        run: docker push "${{ steps.meta.outputs.image }}"

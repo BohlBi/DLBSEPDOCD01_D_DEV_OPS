@@ -1,0 +1,45 @@
+# Manuelles Zurücksetzen der Produktion auf eine frühere, bereits veröffentlichte Version.
+# Da jede Version als unveränderliches Image in GHCR liegt, ist kein Neubau nötig.
+name: rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version, auf die zurückgesetzt wird (z. B. 1.4.0)
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  rollback-production:
+    runs-on: [self-hosted, linux]
+    environment:
+      name: production
+      url: http://localhost:8080
+    env:
+      APP_ENV: production
+      APP_VERSION: ${{ inputs.version }}
+      PORT: "8080"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image-Referenz prüfen
+        run: |
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Keine gültige SemVer-Version"; exit 1; }
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:${APP_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Bei GHCR anmelden
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Ausrollen
+        run: |
+          docker compose -p hello-production -f deploy/docker-compose.yml pull
+          docker compose -p hello-production -f deploy/docker-compose.yml up -d --remove-orphans
+          for i in $(seq 1 15); do curl -fsS "http://localhost:${PORT}/health" && break; sleep 1; done

@@ -1,0 +1,15 @@
+# Eine Compose-Datei für alle Umgebungen. Unterschiede kommen nur über Variablen:
+#   IMAGE        vollständige Image-Referenz, z. B. ghcr.io/<owner>/hello-devops:1.5.0
+#   APP_ENV      staging | production
+#   APP_VERSION  angezeigte Version
+#   PORT         Host-Port (Staging 8081, Produktion 8080)
+# Aufruf aus der Pipeline: docker compose -p hello-$APP_ENV -f deploy/docker-compose.yml up -d
+services:
+  web:
+    image: ${IMAGE:?IMAGE muss gesetzt sein}
+    ports:
+      - "${PORT:-8080}:80"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_VERSION: ${APP_VERSION:-dev}
+    restart: unless-stopped
