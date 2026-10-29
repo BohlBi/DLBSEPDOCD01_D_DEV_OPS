@@ -1,6 +1,7 @@
 # Nach dem Merge dev -> main: kein neuer Build, sondern Promotion des in Staging
-# getesteten Images. Version aus Conventional Commits, Git-Tag + GitHub Release,
-# danach Produktions-Deployment nach manueller Freigabe (Environment "production").
+# getesteten Images. semantic-release berechnet die Version aus den Conventional
+# Commits, retaggt das Image (prepareCmd in .releaserc.json), setzt den Git-Tag
+# und erstellt das GitHub Release. Danach Produktions-Deployment nach Freigabe.
 name: release
 
 on:
@@ -19,80 +20,70 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     outputs:
-      released: ${{ steps.version.outputs.version != '' }}
-      version: ${{ steps.version.outputs.version }}
-      image: ${{ steps.image.outputs.release }}
+      released: ${{ steps.release.outputs.version != '' }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # semantic-release braucht Historie und Tags
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      - name: Nächste Version ermitteln (Trockenlauf)
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release --dry-run
+
+      - name: Kein Release nötig
+        if: steps.plan.outputs.next == ''
+        run: echo "::notice::Keine feat/fix/Breaking-Commits seit dem letzten Release – nichts zu tun."
 
       - name: Getesteten dev-Commit ermitteln
         id: source
+        if: steps.plan.outputs.next != ''
         run: |
           # Der Merge-Commit hat den dev-Stand als zweiten Elternteil.
           # Ist der Code identisch, wird genau dessen Image befördert.
           if git rev-parse -q --verify HEAD^2 >/dev/null && git diff --quiet HEAD^2 HEAD; then
-            echo "sha=$(git rev-parse HEAD^2)" >> "$GITHUB_OUTPUT"
-            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+            sha="$(git rev-parse HEAD^2)"; rebuild=false
           else
             echo "::warning::main weicht vom getesteten dev-Stand ab (z. B. Hotfix) – Image wird neu gebaut."
-            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            sha="${GITHUB_SHA}"; rebuild=true
           fi
-
-      - name: Version berechnen
-        id: version
-        run: node scripts/next-version.mjs --ref "${{ steps.source.outputs.sha }}" --changelog CHANGELOG.release.md
-
-      - name: Kein Release nötig
-        if: steps.version.outputs.version == ''
-        run: echo "::notice::Keine feat/fix/Breaking-Commits seit ${{ steps.version.outputs.previous }} – kein Release."
-
-      - name: Image-Referenzen setzen
-        id: image
-        if: steps.version.outputs.version != ''
-        run: |
           repo="ghcr.io/${GITHUB_REPOSITORY,,}"
-          echo "source=${repo}:sha-${{ steps.source.outputs.sha }}" >> "$GITHUB_OUTPUT"
-          echo "release=${repo}:${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
-          echo "latest=${repo}:latest" >> "$GITHUB_OUTPUT"
+          {
+            echo "rebuild=${rebuild}"
+            echo "repo=${repo}"
+            echo "image=${repo}:sha-${sha}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Bei GHCR anmelden
-        if: steps.version.outputs.version != ''
+        if: steps.plan.outputs.next != ''
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Rückfallebene – Image neu bauen
-        if: steps.version.outputs.version != '' && steps.source.outputs.rebuild == 'true'
+        if: steps.plan.outputs.next != '' && steps.source.outputs.rebuild == 'true'
         run: |
-          docker build --build-arg GIT_SHA="${GITHUB_SHA}" -t "${{ steps.image.outputs.source }}" .
-          docker push "${{ steps.image.outputs.source }}"
+          docker build --build-arg GIT_SHA="${GITHUB_SHA}" -t "${{ steps.source.outputs.image }}" .
+          docker push "${{ steps.source.outputs.image }}"
 
-      - name: Image befördern (Retag ohne Neubau)
-        if: steps.version.outputs.version != ''
-        run: |
-          docker buildx imagetools inspect "${{ steps.image.outputs.source }}" > /dev/null
-          docker buildx imagetools create \
-            --tag "${{ steps.image.outputs.release }}" \
-            --tag "${{ steps.image.outputs.latest }}" \
-            "${{ steps.image.outputs.source }}"
+      - name: Prüfen, ob das zu befördernde Image existiert
+        if: steps.plan.outputs.next != ''
+        run: docker buildx imagetools inspect "${{ steps.source.outputs.image }}" > /dev/null
 
-      - name: Git-Tag und GitHub Release anlegen
-        if: steps.version.outputs.version != ''
+      - name: Release mit semantic-release (Retag, Git-Tag, GitHub Release)
+        id: release
+        if: steps.plan.outputs.next != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Tag auf den getesteten dev-Commit, damit er auch von dev aus erreichbar ist
-          git tag -a "v${VERSION}" "${{ steps.source.outputs.sha }}" -m "Release v${VERSION}"
-          git push origin "v${VERSION}"
-          gh release create "v${VERSION}" --title "v${VERSION}" --notes-file CHANGELOG.release.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_IMAGE: ${{ steps.source.outputs.image }}
+          IMAGE_REPO: ${{ steps.source.outputs.repo }}
+        run: npx semantic-release
 
   deploy-production:
     needs: promote
@@ -102,12 +93,14 @@ jobs:
       name: production   # Required Reviewers -> Pipeline wartet auf Freigabe
       url: http://localhost:8080
     env:
-      IMAGE: ${{ needs.promote.outputs.image }}
       APP_ENV: production
       APP_VERSION: ${{ needs.promote.outputs.version }}
       PORT: "8080"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Image-Referenz setzen
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:${APP_VERSION}" >> "$GITHUB_ENV"
 
       - name: Bei GHCR anmelden
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin

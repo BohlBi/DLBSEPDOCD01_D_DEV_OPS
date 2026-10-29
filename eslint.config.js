@@ -8,7 +8,7 @@ export default [
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['scripts/**/*.mjs', 'test/**/*.js', '*.config.js', '*.config.mjs'],
+    files: ['test/**/*.js', '*.config.js', '*.config.mjs'],
     languageOptions: { globals: globals.node },
   },
 ];

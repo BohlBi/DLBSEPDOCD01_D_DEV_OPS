@@ -32,24 +32,14 @@ jobs:
       PORT: "8081"
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # Historie + Tags für die Versionsberechnung
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Vorab-Version berechnen (z. B. 1.5.0-rc.a1b2c3d)
-        id: version
-        run: node scripts/next-version.mjs --pre "rc.${GITHUB_SHA::7}"
 
       - name: Bei GHCR anmelden
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Mit Docker Compose ausrollen
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version || format('dev-{0}', github.sha) }}
         run: |
+          # Die SemVer-Version entsteht erst beim Release auf main, Staging zeigt den Commit.
+          export APP_VERSION="dev-${GITHUB_SHA::7}"
           docker compose -p hello-staging -f deploy/docker-compose.yml pull
           docker compose -p hello-staging -f deploy/docker-compose.yml up -d --remove-orphans
 
